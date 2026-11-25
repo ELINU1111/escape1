@@ -1,0 +1,692 @@
+<title>발명 도미노</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&family=IBM+Plex+Sans+KR:wght@400;600;700&display=swap">
+<style>
+/* Layout: one-screen exhibit for a 16:9 TV. Network fills the left (rows = fields, left→right = earlier→later), a docked info panel on the right, slim header on top. Single dark "night gallery" look by choice. */
+:root{
+  --bg:#03090f;
+  --bg-2:#071420;
+  --panel:#0a1a28;
+  --line:#1f5878;
+  --cyan:#66e6ff;
+  --cyan-dim:#2f8db0;
+  --gold:#ffc95c;
+  --ink:#e6f6ff;
+  --muted:#86a3b8;
+  --ember:#ff7d5c;
+  --ember-dim:#7a3326;
+  --f-body:"IBM Plex Sans KR","Malgun Gothic","Apple SD Gothic Neo",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+  color-scheme:dark;
+}
+html,body{height:100%}
+[hidden]{display:none!important}
+html{font-size:clamp(14px, .9vw + .35vh, 24px)}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f-body);overflow:hidden;word-break:keep-all}
+.app{height:100%;display:grid;grid-template-rows:auto 1fr;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-block:.8rem;gap:.8rem;box-sizing:border-box;
+  background:radial-gradient(ellipse at 40% 45%, #0b2233 0%, var(--bg) 70%)}
+header{display:flex;align-items:center;gap:1rem;flex-wrap:wrap}
+@media (max-width:2100px){header p{display:none}}
+header h1{margin:0;font-size:2rem;font-weight:700;letter-spacing:-.01em;text-wrap:balance}
+header h1 span{color:var(--cyan)}
+header p{margin:0;color:var(--muted);font-size:1.05rem}
+.spacer{flex:1}
+.counter{font-family:var(--f-mono);font-size:1.15rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.counter b{color:var(--cyan);font-size:1.6rem}
+button{font:inherit;cursor:pointer;border-radius:.6rem;border:1px solid var(--line);background:var(--bg-2);color:var(--ink);padding:.55rem 1.1rem;font-size:1rem;font-weight:600}
+button:hover{border-color:var(--cyan)}
+button:focus-visible,.node:focus-visible{outline:3px solid var(--cyan);outline-offset:3px}
+button:disabled{opacity:.4;cursor:default}
+#jumpBtn{border-color:#6b5524;color:var(--gold)}
+#jumpBtn[aria-pressed="true"]{background:#3a2e12;border-color:var(--gold)}
+
+main{display:grid;grid-template-columns:1fr minmax(17rem,21vw);gap:.8rem;min-height:0}
+.stage{position:relative;min-width:0;min-height:0;border-radius:1rem;overflow:hidden;
+  background:linear-gradient(180deg,rgba(102,230,255,.04),rgba(102,230,255,0));border:1px solid rgba(102,230,255,.12)}
+svg#net{width:100%;height:100%;display:block;touch-action:none;cursor:grab;user-select:none}
+svg#net.panning{cursor:grabbing}
+.zoom{position:absolute;right:.8rem;bottom:.8rem;display:flex;gap:.4rem}
+.zoom button{width:2.8rem;height:2.8rem;padding:0;font-size:1.3rem}
+.legend{display:flex;gap:1.2rem;flex-wrap:wrap;align-items:center;color:var(--muted);font-size:.95rem}
+.legend i{display:inline-block;width:1.8rem;height:3px;vertical-align:middle;margin-right:.4rem;background:var(--cyan-dim)}
+.legend i.g{background:repeating-linear-gradient(90deg,var(--gold) 0 8px,transparent 8px 12px)}
+
+/* graph */
+.lane rect{fill:rgba(102,230,255,.035)}
+.lane:nth-child(even) rect{fill:rgba(102,230,255,0)}
+.lane line{stroke:rgba(102,230,255,.12);stroke-width:1.5}
+.lane text{fill:var(--muted);font-size:23px;font-weight:700;font-family:var(--f-body);opacity:.85}
+.edge{fill:none;stroke:var(--cyan-dim);stroke-width:2.4;opacity:.55;transition:opacity .6s,stroke .6s}
+.elabel{fill:#a9d8ec;font-size:19px;font-family:var(--f-body);opacity:.75;paint-order:stroke;stroke:var(--bg);stroke-width:5px;stroke-linejoin:round;transition:opacity .6s,fill .3s;pointer-events:none}
+.e.jump .edge{stroke:var(--gold);opacity:.7;stroke-dasharray:14 7}
+.e.jump .elabel{fill:var(--gold);opacity:.9}
+.e.hl .edge{stroke:var(--cyan);opacity:1;stroke-width:3.4}
+.e.jump.hl .edge{stroke:var(--gold);stroke-width:4}
+.e.hl .elabel{fill:#fff;opacity:1;font-weight:600}
+.e.jump.hl .elabel{fill:var(--gold)}
+.dimmed .e:not(.hl) .edge{opacity:.14}
+.dimmed .e:not(.hl) .elabel{opacity:.1}
+.jumpmode .e:not(.jump) .edge{opacity:.07}
+.jumpmode .e:not(.jump) .elabel{opacity:0}
+.jumpmode .e.jump .edge{stroke-width:4.5;opacity:1}
+.jumpmode .e.jump .elabel{opacity:1;font-weight:600}
+.e.dead .edge{opacity:.05;stroke:var(--muted)}
+.e.dead .elabel{opacity:.05}
+.spark{fill:none;stroke:var(--ember);stroke-width:5;stroke-linecap:round;filter:url(#glowE)}
+
+.node{cursor:pointer;outline:none}
+.node .body{transform-box:fill-box;transform-origin:center;transition:opacity .8s}
+.node .halo{fill:var(--cyan);opacity:.13}
+.node .core{fill:url(#coreGrad);stroke:var(--cyan);stroke-width:3}
+.node .name{fill:#fff;font-size:25px;font-weight:700;text-anchor:middle;dominant-baseline:central;font-family:var(--f-body);pointer-events:none}
+.node .year{fill:var(--muted);font-size:18px;text-anchor:middle;font-family:var(--f-mono);pointer-events:none}
+.node:hover .halo,.node.sel .halo{opacity:.32}
+.node.sel .core{stroke-width:5;stroke:#fff}
+.dimmed .node:not(.hl):not(.sel) .body{opacity:.4}
+.node.dying .body{animation:dissolve 1.1s ease-in forwards}
+.node.dying .core{stroke:var(--ember)}
+.node.dying .halo{fill:var(--ember);opacity:.5}
+.node.gone .body{opacity:.16}
+.node.gone .core{stroke:var(--muted);stroke-dasharray:6 6;fill:var(--bg-2)}
+.node.gone .halo{opacity:0}
+.node.gone .name{fill:var(--muted)}
+.node.revive .body{animation:revive .9s ease-out}
+@keyframes dissolve{0%{transform:scale(1);opacity:1}25%{transform:scale(1.18);opacity:1}100%{transform:scale(.82);opacity:.16}}
+@keyframes revive{0%{transform:scale(.7);opacity:.2}60%{transform:scale(1.1)}100%{transform:scale(1);opacity:1}}
+
+/* panel */
+aside{min-width:0;min-height:0;display:flex;flex-direction:column;gap:.8rem}
+.card{background:var(--panel);border:1px solid rgba(102,230,255,.16);border-radius:1rem;padding:1.1rem 1.2rem;min-height:0}
+/* 위 카드: 내용만큼 늘어남(스크롤 없음). 아래 기록 카드: 남는 공간만 쓰고 그 안에서 스크롤 */
+.info{flex:0 0 auto;max-height:calc(100% - 8rem);overflow:auto}
+.eyebrow{font-size:.8rem;letter-spacing:.08em;color:var(--muted);margin:0 0 .3rem}
+.field{display:inline-block;color:var(--cyan);border:1px solid var(--line);border-radius:99px;padding:.05rem .55rem;margin-right:.4rem;letter-spacing:0}
+.info h2{margin:0;font-size:2.1rem;line-height:1.15;text-wrap:balance}
+.info .yr{font-family:var(--f-mono);color:var(--cyan);font-size:1rem;margin:.2rem 0 .6rem}
+.info p.desc{margin:0 0 .9rem;font-size:1.1rem;line-height:1.5}
+.info h3{font-size:.95rem;color:var(--muted);margin:.9rem 0 .35rem;font-weight:600}
+.info ul{list-style:none;margin:0;padding:0;display:grid;gap:.3rem}
+.info li{font-size:1rem;line-height:1.4}
+.info li span{color:var(--muted)}
+.info li.jump span{color:var(--gold)}
+.chip{display:inline-block;padding:.15rem .6rem;border-radius:99px;border:1px solid var(--line);margin:.15rem .2rem .15rem 0;font-size:.95rem;cursor:pointer;background:none;color:var(--ink);font-weight:400}
+li.jump .chip,.chip.jchip{border-color:#6b5524}
+.chip.jchip{color:var(--gold)}
+.danger{margin-top:.2rem;width:100%;padding:.9rem;font-size:1.25rem;background:var(--ember-dim);border-color:var(--ember);color:#fff}
+.danger:hover{background:#9a3d2c;border-color:#ffb19c}
+.preview{margin-top:.6rem;font-size:1rem;color:var(--muted)}
+.preview b{color:var(--ember);font-size:1.3rem;font-family:var(--f-mono)}
+.goneNote{margin-top:.8rem;padding:.7rem .9rem;border-radius:.6rem;background:rgba(255,125,92,.1);border:1px solid var(--ember-dim);font-size:1rem;line-height:1.45}
+.picks{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.4rem}
+.log{flex:1 1 0;min-height:6rem;display:flex;flex-direction:column;overflow:hidden}
+.log h3{margin:0 0 .5rem;font-size:1.05rem;flex:0 0 auto}
+.log ol{flex:1 1 0;margin:0;padding:0 .3rem 0 0;list-style:none;overflow-y:auto;display:flex;flex-direction:column;gap:.5rem;min-height:0}
+.log li{flex:0 0 auto}
+.log li{font-size:.98rem;line-height:1.4;padding-left:.8rem;border-left:3px solid var(--ember);animation:slide .5s ease-out}
+.log li b{font-size:1.1rem}
+.log li em{display:block;color:var(--muted);font-style:normal}
+.log li .cross{display:inline-block;margin-left:.3rem;color:var(--gold);font-size:.85rem}
+.log .empty{color:var(--muted);border:none;padding:0;animation:none}
+@keyframes slide{from{opacity:0;transform:translateX(12px)}to{opacity:1;transform:none}}
+
+.mission{font-family:var(--f-mono);font-size:1.15rem;color:var(--muted);border:1px solid var(--line);border-radius:.6rem;padding:.4rem .8rem;font-variant-numeric:tabular-nums}
+.mission b{color:var(--gold);font-size:1.4rem}
+.mission.done{border-color:var(--gold);color:var(--gold);cursor:pointer}
+.modal{position:fixed;inset:0;z-index:20;display:grid;place-items:center;background:rgba(2,6,10,.82);backdrop-filter:blur(4px);
+  padding:max(16px,env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) max(16px,env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+.modal .box{background:var(--panel);border:2px solid var(--gold);border-radius:1.4rem;padding:2rem 2.4rem;max-width:min(92vw,46rem);max-height:100%;overflow:auto;box-sizing:border-box;
+  display:flex;flex-direction:column;align-items:center;gap:1rem;text-align:center;box-shadow:0 0 80px rgba(255,201,92,.25)}
+.modal h2{margin:0;font-size:2.6rem;color:var(--gold)}
+.modal p{margin:0;font-size:1.25rem;line-height:1.5}
+.modal .row{display:flex;gap:.6rem;flex-wrap:wrap;justify-content:center;width:100%}
+.modal input{font:inherit;font-size:1.6rem;padding:.6rem 1rem;border-radius:.7rem;border:2px solid var(--line);background:var(--bg);color:var(--ink);width:14rem;max-width:100%;text-align:center}
+.modal input:focus{outline:none;border-color:var(--gold)}
+.modal .big{font-size:1.4rem;padding:.8rem 1.6rem}
+.modal .gold{background:var(--gold);border-color:var(--gold);color:#1d1503}
+.qrwrap{background:#fff;padding:1rem;border-radius:1rem;line-height:0}
+#qrCanvas{width:min(44vh,26rem);height:auto;image-rendering:pixelated;max-width:100%}
+.qrtext{font-family:var(--f-mono);color:var(--muted);font-size:1rem}
+.modal .err{color:var(--ember);font-size:1rem;min-height:1.2em}
+
+@media (max-width:900px){
+  body{overflow:auto}
+  .app{height:auto;min-height:100%}
+  main{grid-template-columns:1fr}
+  .stage{height:62vh}
+  .info{max-height:none}
+  header h1{font-size:1.5rem}
+}
+@media (prefers-reduced-motion:reduce){
+  .node.dying .body,.node.revive .body,.log li{animation-duration:.01s}
+}
+</style>
+
+<div class="app">
+  <header>
+    <h1>발명 <span>도미노</span></h1>
+    <p>하나를 지우면, 무엇이 함께 사라질까요?</p>
+    <div class="spacer"></div>
+    <div class="legend"><span><i></i>영향을 준 연결</span><span><i class="g"></i>다른 분야로 건너간 연결</span></div>
+    <button type="button" class="mission" id="mission" title="10번 지우면 미션 완료" disabled>미션 <b id="mcount">0</b> / <span id="mgoal">10</span></button>
+    <div class="counter">남은 발명품 <b id="alive">0</b> / <span id="total">0</span></div>
+    <button id="jumpBtn" type="button" aria-pressed="false">★ 분야를 넘은 연결</button>
+    <button id="reset" type="button">모두 되돌리기</button>
+    <button id="fs" type="button">전체 화면</button>
+  </header>
+  <main>
+    <div class="stage">
+      <svg id="net" viewBox="0 0 2560 1700" preserveAspectRatio="xMidYMid meet" aria-label="발명품 연결망">
+        <defs>
+          <radialGradient id="coreGrad" cx="50%" cy="40%" r="60%">
+            <stop offset="0%" stop-color="#1a6f8f"/>
+            <stop offset="100%" stop-color="#06253a"/>
+          </radialGradient>
+          <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="7" result="b"/>
+            <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+          <filter id="glowE" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur stdDeviation="4" result="b"/>
+            <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
+        <g id="vp">
+          <g id="lanes"></g>
+          <g id="edges"></g>
+          <g id="sparks"></g>
+          <g id="nodes"></g>
+          <g id="particles"></g>
+        </g>
+      </svg>
+      <div class="zoom">
+        <button type="button" id="zin" aria-label="확대">+</button>
+        <button type="button" id="zout" aria-label="축소">−</button>
+        <button type="button" id="zfit" aria-label="전체 보기">⤢</button>
+      </div>
+    </div>
+    <aside>
+      <section class="card info" id="info" aria-live="polite"></section>
+      <section class="card log">
+        <h3>사라진 순서</h3>
+        <ol id="log"><li class="empty">아직 사라진 발명품이 없어요.</li></ol>
+      </section>
+    </aside>
+  </main>
+</div>
+
+<div class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="mTitle" hidden>
+  <div class="box">
+    <h2 id="mTitle">미션 완료!</h2>
+    <div id="stepPick" class="row" style="flex-direction:column;align-items:center;gap:1rem">
+      <p>발명품을 <b id="mDone">10</b>번 눌러 봤어요.<br><span id="pickMsg">QR에 담을 발명을 하나 고르세요.</span></p>
+      <div class="row" id="pickList"></div>
+    </div>
+    <div id="stepQR" class="row" style="flex-direction:column;align-items:center;gap:1rem" hidden>
+      <p><b id="qrWhat"></b> 담은 QR이에요.<br>휴대폰 방탈출 앱으로 찍으세요.</p>
+      <div class="qrwrap"><canvas id="qrCanvas" width="10" height="10"></canvas></div>
+      <p class="qrtext" id="qrText"></p>
+      <div class="row">
+        <button type="button" class="big gold" id="nextPerson">다음 사람에게 넘기기</button>
+        <button type="button" class="big" id="backPick">다시 고르기</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+<script>
+// 가로줄 = 분야, 왼쪽 → 오른쪽 = 먼저 → 나중 (필요했던 발명이 항상 왼쪽에 있어요)
+const LANES = {
+  info:  {name:"통신·정보",   lines:["통신·정보"],          top:15,   bot:465,  rows:{A:90, B:240, C:390}},
+  opt:   {name:"광학·과학",   lines:["광학·과학"],          top:465,  bot:620,  rows:{A:545}},
+  med:   {name:"의학·생명",   lines:["의학·생명"],          top:620,  bot:770,  rows:{A:695}},
+  space: {name:"우주·항해",   lines:["우주·항해"],          top:770,  bot:920,  rows:{A:845}},
+  mech:  {name:"도구·기계·교통·건축", lines:["도구·기계","교통·건축"], top:920, bot:1220, rows:{A:995, B:1145}},
+  mat:   {name:"소재·에너지", lines:["소재·에너지"],        top:1220, bot:1520, rows:{A:1295, B:1445}},
+  life:  {name:"생활·농업",   lines:["생활·농업"],          top:1520, bot:1690, rows:{A:1595}},
+};
+// [id, 이름, 연도, 분야, 줄, 열, 설명, 필요했던 발명 [[id, 선에 쓰일 영향, ★다른 분야로 건너간 연결?]]]
+const RAW = [
+  ["stone","석기","약 260만 년 전","mech","A",0,"돌을 깨뜨려 만든 인류 최초의 도구.",[]],
+  ["fire","불의\n사용","약 40만 년 전","life","A",0,"불을 피우고 다루면서 요리·난방·가공이 가능해졌어요.",[]],
+  ["agri","농업","기원전 9000년경","life","A",1,"씨앗을 심어 곡식을 길러 한곳에 정착해 살게 됐어요.",[["stone","돌낫·돌괭이로 경작"]]],
+  ["pottery","토기","기원전 1만 년경","mat","A",1,"흙을 빚어 구운 그릇. 곡식을 저장하고 끓일 수 있게 됐어요.",[["fire","흙을 불에 구움"]]],
+  ["writing","문자","기원전 3200년","info","A",2,"말을 기호로 남겨 기록과 지식 전달이 가능해졌어요.",[["agri","곡식 거래를 기록",1]]],
+  ["wheel","바퀴","기원전 3500년","mech","A",2,"무거운 짐을 굴려서 옮기게 해 준 발명. 처음엔 그릇 빚는 물레였어요.",[["pottery","도공의 물레에서 출발",1]]],
+  ["weaving","베틀","기원전 5000년경","life","A",2,"실을 엮어 옷감을 짜는 틀.",[["agri","아마·목화를 재배"]]],
+  ["metal","금속\n제련","기원전 5000년경","mat","A",2,"광석을 녹여 구리·청동·철을 얻는 기술.",[["fire","고온으로 광석을 녹임"],["pottery","가마 기술을 이어받음"]]],
+  ["glass","유리","기원전 2500년경","mat","B",2,"모래를 녹여 만든 투명한 재료.",[["fire","모래를 녹여 만듦"]]],
+  ["paper","종이","105년","info","A",3,"채륜이 개량한 가볍고 값싼 기록 재료.",[["writing","글을 담을 가벼운 재료"]]],
+  ["compass","나침반","11세기","space","A",3,"자석 바늘로 방향을 알려 주는 도구.",[["metal","자성을 띤 철 바늘"]]],
+  ["gunpowder","화약","9세기","mat","A",3,"불을 붙이면 폭발하는 혼합물. 불로장생 약을 찾다 발견됐어요.",[["fire","불을 붙여 폭발시킴"]]],
+  ["clock","기계\n시계","13세기","mech","B",3,"톱니바퀴로 시간을 재는 기계.",[["metal","톱니바퀴를 깎아 만듦"]]],
+  ["lens","렌즈","13세기","opt","A",3,"유리를 갈아 빛을 모으거나 퍼뜨리는 도구. 안경에서 시작했어요.",[["glass","유리를 갈아 만듦",1]]],
+  ["printing","금속\n활자","1377년 (직지)","info","A",4,"금속으로 만든 활자로 책을 빠르게 찍어 냈어요.",[["paper","찍어 낼 종이"],["metal","금속으로 활자 주조",1]]],
+  ["microscope","현미경","1590년","opt","A",4,"아주 작은 것을 크게 보여 주는 도구.",[["lens","렌즈를 여러 장 겹침"]]],
+  ["steam","증기\n기관","1769년","mech","A",4,"끓는 물의 증기로 기계를 움직인 산업혁명의 심장.",[["metal","강한 철 실린더"],["fire","석탄을 태운 열"]]],
+  ["battery","전지","1800년","mat","A",4,"볼타가 만든, 전기를 꾸준히 흘려 주는 장치.",[["metal","두 금속의 화학 반응"]]],
+  ["rubber","가황\n고무","1839년","mat","B",4,"고무에 황을 넣고 가열해 질기고 탄력 있게 만들었어요.",[["fire","황과 함께 가열"]]],
+  ["typewriter","타자기","1868년","info","A",5,"자판을 눌러 글자를 찍는 기계.",[["printing","활자 원리를 손끝으로"]]],
+  ["telegraph","전신","1837년","info","B",5,"전선으로 모스 부호를 보내는 통신.",[["battery","전류로 신호 전송",1]]],
+  ["telescope","망원경","1608년","opt","A",5,"멀리 있는 별과 행성을 가까이 보게 해 줬어요.",[["lens","렌즈로 먼 곳을 확대"]]],
+  ["bicycle","자전거","1817년","mech","A",5,"페달과 체인으로 달리는 두 바퀴.",[["wheel","두 바퀴로 균형"],["metal","쇠 체인과 기어"]]],
+  ["jacquard","자카드\n직기","1804년","mech","B",5,"구멍 뚫린 카드로 무늬를 자동으로 짜는 베틀. 이 카드가 훗날 컴퓨터로 이어져요.",[["weaving","베틀을 자동화",1],["clock","정밀한 톱니 장치"]]],
+  ["generator","발전기","1831년","mat","A",5,"자석과 코일로 전기를 만들어 내는 장치.",[["battery","전자기 유도 실험"],["compass","자석·자기장 연구",1]]],
+  ["oil","석유\n정제","1850년대","mat","B",5,"원유를 끓여 등유·휘발유 등으로 나눠요.",[["metal","쇠 증류탑으로 분리"]]],
+  ["canning","통조림","1810년","life","A",5,"나폴레옹 군대의 식량을 오래 보관하려다 생겨났어요.",[["metal","주석 깡통에 밀봉",1]]],
+  ["photo","사진","1826년","opt","A",6,"빛으로 장면을 그대로 기록하는 기술.",[["lens","빛을 모아 상을 맺음"]]],
+  ["telephone","전화","1876년","info","B",6,"목소리를 전기 신호로 바꿔 멀리 보내요.",[["telegraph","전선 통신망을 활용"]]],
+  ["railway","증기\n기관차","1804년","mech","A",6,"철길 위를 달리는 증기의 힘.",[["steam","증기 힘으로 바퀴를 굴림"],["wheel","철길 위 쇠바퀴"]]],
+  ["steamship","증기선","1807년","mech","B",6,"바람 없이도 바다를 건너는 배.",[["steam","증기로 물레바퀴를 돌림"],["compass","먼 바다 항해",1]]],
+  ["bulb","백열\n전구","1879년","mat","A",6,"전기로 밤을 밝힌 발명.",[["generator","전기를 공급"],["glass","진공 유리구"]]],
+  ["steel","강철","1856년","mat","B",6,"베서머 공법으로 강철을 값싸게 대량 생산했어요.",[["metal","쇳물에 공기를 불어 넣음"],["steam","증기 송풍기",1]]],
+  ["vaccine","백신","1885년","med","A",6,"약하게 만든 병원체로 몸에 면역을 만들어요.",[["microscope","병원체를 관찰",1]]],
+  ["fridge","냉장고","1913년","life","A",6,"가정용 전기냉장고로 음식을 오래 보관해요.",[["generator","전기로 압축기 작동",1],["steam","증기 압축 원리",1]]],
+  ["phonograph","축음기","1877년","info","A",7,"소리를 기록하고 다시 틀어 주는 기계. 음악 산업이 시작됐어요.",[["telephone","전화 송화기 실험 중 발견"]]],
+  ["radio","무선\n통신","1895년","info","B",7,"전선 없이 전파로 신호를 보내요.",[["telegraph","전신 부호를 무선으로"]]],
+  ["vacuum","진공관","1904년","info","C",7,"전기 신호를 키우고 조절하는 유리관.",[["bulb","전구 실험에서 발견",1]]],
+  ["film","영화","1895년","opt","A",7,"움직이는 사진을 스크린에 비춰요.",[["photo","연속 사진을 이어 붙임"],["bulb","영사기 조명",1]]],
+  ["xray","엑스선\n촬영","1895년","med","A",7,"몸속 뼈를 사진으로 찍는 기술.",[["photo","사진건판에 뼈를 기록",1],["generator","고전압으로 방전관 작동",1]]],
+  ["engine","내연\n기관","1876년","mech","A",7,"연료를 엔진 안에서 태워 힘을 내는 기관.",[["steam","피스톤 원리를 계승"],["gunpowder","폭발 힘을 피스톤에",1],["oil","휘발유 연료",1]]],
+  ["elevator","엘리\n베이터","1852년","mech","B",7,"오티스의 추락 방지 장치 덕분에 사람이 안심하고 탔어요.",[["steam","증기 동력으로 끌어올림"],["steel","강철 케이블",1]]],
+  ["plastic","플라스틱","1907년","mat","B",7,"최초의 합성수지 베이클라이트.",[["oil","석유 화학 원료"]]],
+  ["tv","TV","1927년","info","A",8,"전파로 영상을 보내 집에서 봐요.",[["radio","전파로 영상 송신"],["vacuum","영상 신호 증폭"]]],
+  ["computer","전자\n컴퓨터","1946년","info","B",8,"에니악: 방 하나를 가득 채운 계산 기계.",[["vacuum","진공관 약 1만 8천 개"],["jacquard","천공카드로 프로그램 입력",1]]],
+  ["radar","레이더","1935년","info","C",8,"전파를 쏘아 비행기의 위치를 알아내요.",[["radio","전파 반사를 이용"],["vacuum","강한 전파 발생"]]],
+  ["antibiotic","항생제","1928년","med","A",8,"플레밍의 페니실린. 세균 감염을 치료해요.",[["microscope","세균을 관찰해 발견",1]]],
+  ["rocket","로켓","1926년","space","A",8,"고다드의 액체 연료 로켓에서 우주 시대가 시작돼요.",[["gunpowder","화약 로켓에서 출발",1]]],
+  ["car","자동차","1886년","mech","A",8,"스스로 움직이는 탈것.",[["engine","작고 강한 동력"],["bicycle","체인·볼베어링 기술"],["rubber","공기 타이어",1]]],
+  ["plane","비행기","1903년","mech","B",8,"라이트 형제가 처음 하늘을 날았어요. 둘은 자전거 가게 주인이었어요.",[["engine","가벼운 엔진으로 프로펠러 구동"],["bicycle","자전거 가게의 균형 기술"]]],
+  ["transistor","트랜\n지스터","1947년","info","A",9,"반도체로 만든 작은 전기 스위치.",[["radio","라디오용 반도체 연구"]]],
+  ["internet","인터넷","1969년","info","B",9,"전 세계 컴퓨터를 잇는 네트워크.",[["computer","컴퓨터끼리 연결"],["telephone","전화선으로 데이터 전송"]]],
+  ["laser","레이저","1960년","opt","A",9,"한 가지 색의 곧고 강한 빛.",[["radar","마이크로파 연구(메이저)",1],["lens","거울·렌즈로 빛을 모음"]]],
+  ["ct","CT","1971년","med","A",9,"엑스선 사진을 컴퓨터로 합쳐 몸의 단면을 봐요.",[["xray","여러 각도에서 촬영"],["computer","단면 영상을 계산",1]]],
+  ["satellite","인공\n위성","1957년","space","A",9,"스푸트니크 1호. 지구 궤도를 도는 기계.",[["rocket","궤도까지 쏘아 올림"],["radio","지상과 전파 교신",1]]],
+  ["skyscraper","고층\n빌딩","1885년","mech","A",9,"강철 뼈대와 엘리베이터가 도시를 하늘로 키웠어요.",[["steel","강철 뼈대",1],["elevator","꼭대기까지 오르내림"]]],
+  ["microwave","전자\n레인지","1945년","life","A",9,"레이더 연구자 주머니 속 초콜릿이 녹으면서 발견됐어요.",[["radar","레이더 마그네트론",1]]],
+  ["game","비디오\n게임","1972년","info","A",10,"퐁(Pong): TV 화면 속 탁구 게임.",[["tv","TV 화면에 그림 표시"],["computer","컴퓨터로 게임 계산"]]],
+  ["ic","집적\n회로","1958년","info","B",10,"수많은 부품을 손톱만 한 칩 하나에.",[["transistor","트랜지스터를 한 칩에"],["photo","사진 식각으로 회로를 새김",1]]],
+  ["barcode","바코드","1974년","info","C",10,"줄무늬를 빛으로 읽어 물건값을 계산해요.",[["laser","레이저로 줄무늬 읽기",1],["computer","가격 정보 처리"]]],
+  ["pacemaker","심장\n박동기","1958년","med","A",10,"몸속에 넣어 심장 박동을 돕는 장치.",[["transistor","작은 부품이라 몸속에",1],["battery","몸속에서 오래 가는 전원",1]]],
+  ["gps","GPS","1978년","space","A",10,"위성 신호로 지금 내 위치를 알아내요.",[["satellite","위성 신호로 위치 계산"],["clock","정밀한 시간 측정",1]]],
+  ["solar","태양\n전지","1954년","mat","A",10,"햇빛을 바로 전기로 바꿔요.",[["transistor","반도체 연구에서 탄생",1]]],
+  ["pc","개인용\nPC","1977년","info","A",11,"책상 위에 올라온 컴퓨터.",[["ic","작은 칩으로 소형화"],["computer","컴퓨터 구조를 계승"],["typewriter","타자기 자판 배열"]]],
+  ["www","월드\n와이드웹","1989년","info","B",11,"링크로 이어진 문서들. 웹사이트의 시작이에요.",[["internet","인터넷 위의 문서망"]]],
+  ["digicam","디지털\n카메라","1975년","opt","A",11,"필름 대신 이미지 센서로 찍어요.",[["photo","사진 원리를 계승"],["ic","이미지 센서 칩",1]]],
+  ["printer3d","3D\n프린터","1984년","mech","A",11,"얇은 층을 차곡차곡 쌓아 입체를 만들어요.",[["printing","인쇄를 층층이 쌓아 입체로",1],["laser","빛으로 재료를 굳힘",1],["plastic","녹여 쌓는 재료",1]]],
+  ["liion","리튬\n이온전지","1991년","mat","A",11,"가볍고 다시 충전되는 전지.",[["battery","전지 원리를 개량"]]],
+  ["gpu","GPU","1999년","info","A",12,"그래픽을 빠르게 그리는 칩.",[["game","더 화려한 게임 그래픽"],["ic","수천 개의 계산 코어"]]],
+  ["hubble","우주\n망원경","1990년","space","A",12,"허블: 대기 밖에서 우주를 선명하게 봐요.",[["telescope","망원경을 우주로",1],["rocket","우주로 운반"],["solar","태양전지판 전원",1]]],
+  ["ev","전기\n자동차","2008년","mech","A",12,"엔진 대신 전지와 모터로 달려요.",[["car","자동차 구조를 계승"],["liion","큰 배터리 묶음",1]]],
+  ["drone","드론","2010년대","mech","B",12,"사람 없이 스스로 나는 작은 비행기.",[["plane","프로펠러 비행 원리"],["gps","자동 위치 비행",1],["liion","가벼운 전원",1]]],
+  ["ai","인공\n지능","2010년대","info","A",13,"데이터로 스스로 배우는 컴퓨터 프로그램.",[["pc","계산 능력"],["www","학습할 방대한 데이터"],["gpu","게임용 칩으로 딥러닝"]]],
+  ["smartphone","스마트폰","2007년","info","B",13,"손 안의 컴퓨터·전화·카메라·지도.",[["www","어디서나 웹 접속"],["ic","손바닥만 한 컴퓨터"],["gps","지도와 길찾기",1],["digicam","카메라 내장",1],["liion","하루 종일 가는 전지",1]]],
+  ["mrna","mRNA\n백신","2020년","med","A",13,"유전 정보를 담아 빠르게 만든 코로나19 백신.",[["vaccine","면역 원리를 계승"],["fridge","영하 70도 초저온 보관",1],["computer","유전자 서열 분석",1]]],
+];
+const DATA = RAW.map(([id, name, yr, f, row, col, d, req]) => ({id, name, yr, f, row, col, d, req}));
+const PICKS = ["lens", "battery", "wheel", "paper", "printing", "compass"];
+const COLX = c => 240 + c * 172;
+const R = 56;
+const STEP = matchMedia("(prefers-reduced-motion: reduce)").matches ? 250 : 1100;
+const SVGNS = "http://www.w3.org/2000/svg";
+
+const byId = Object.fromEntries(DATA.map(n => [n.id, {...n, x: COLX(n.col), y: LANES[n.f].rows[n.row]}]));
+const children = {}; DATA.forEach(n => children[n.id] = []);
+const EDGES = [];
+DATA.forEach(n => n.req.forEach(([p, why, j]) => {
+  if (!byId[p]) throw new Error("unknown prerequisite " + p);
+  if (byId[p].col >= n.col) throw new Error(p + " must be left of " + n.id);
+  const jump = !!j && byId[p].f !== n.f;
+  children[p].push({id: n.id, why, jump}); EDGES.push({from: p, to: n.id, why, jump});
+}));
+
+const alive = new Set(DATA.map(n => n.id));
+const goneWhy = {};
+let selected = null, busy = false, lastRun = [];
+
+const $ = s => document.querySelector(s);
+const el = (tag, attrs = {}, parent) => { const e = document.createElementNS(SVGNS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; };
+const plain = s => s.replace(/\n/g, " ");
+const nm = id => plain(byId[id].name);
+const josa = (word, a, b) => { const c = word.charCodeAt(word.length - 1); if (c >= 0xAC00 && c <= 0xD7A3) return word + ((c - 0xAC00) % 28 ? a : b); return word + b; };
+
+// ---------- draw ----------
+const gL = $("#lanes"), gE = $("#edges"), gN = $("#nodes"), gS = $("#sparks"), gP = $("#particles");
+Object.values(LANES).forEach(L => {
+  const g = el("g", {class: "lane"}, gL);
+  el("rect", {x: 8, y: L.top, width: 2544, height: L.bot - L.top, rx: 14}, g);
+  el("line", {x1: 8, x2: 2552, y1: L.bot, y2: L.bot}, g);
+  const mid = (L.top + L.bot) / 2;
+  L.lines.forEach((t, i) => { const tx = el("text", {x: 26, y: mid + (i - (L.lines.length - 1) / 2) * 30, "dominant-baseline": "central"}, g); tx.textContent = t; });
+});
+const edgeEl = {};
+EDGES.forEach((e, i) => {
+  const a = byId[e.from], b = byId[e.to];
+  const x1 = a.x + R, x2 = b.x - R, dx = Math.max(60, (x2 - x1) * .45);
+  const d = `M${x1},${a.y} C${x1 + dx},${a.y} ${x2 - dx},${b.y} ${x2},${b.y}`;
+  const g = el("g", {class: "e" + (e.jump ? " jump" : "")}, gE);
+  const p = el("path", {class: "edge", d}, g);
+  const mid = p.getPointAtLength(p.getTotalLength() / 2);
+  const t = el("text", {class: "elabel", x: mid.x, y: mid.y, "text-anchor": "middle", "dominant-baseline": "central"}, g);
+  t.textContent = (e.jump ? "★ " : "") + e.why;
+  edgeEl[e.from + ">" + e.to] = {g, p};
+});
+// 분야를 넘는 연결은 위에 그려서 잘 보이게
+gE.querySelectorAll(".e.jump").forEach(g => gE.appendChild(g));
+const nodeEl = {};
+DATA.forEach(n => {
+  const N = byId[n.id];
+  const g = el("g", {class: "node", transform: `translate(${N.x},${N.y})`, tabindex: 0, role: "button", "aria-label": plain(n.name) + ", " + n.yr, "data-id": n.id}, gN);
+  const body = el("g", {class: "body"}, g);
+  el("circle", {class: "halo", r: R + 14, filter: "url(#glow)"}, body);
+  el("circle", {class: "core", r: R}, body);
+  const lines = n.name.split("\n");
+  lines.forEach((ln, i) => { const t = el("text", {class: "name", y: (i - (lines.length - 1) / 2) * 28}, body); t.textContent = ln; if (ln.length > 4) t.style.fontSize = "21px"; });
+  const y = el("text", {class: "year", y: R + 26}, body); y.textContent = n.yr;
+  nodeEl[n.id] = g;
+  g.addEventListener("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); select(n.id); } });
+  g.addEventListener("pointerenter", () => { if (!selected) highlight(n.id); });
+  g.addEventListener("pointerleave", () => { if (!selected) highlight(null); });
+});
+$("#total").textContent = DATA.length;
+
+function highlight(id) {
+  const svg = $("#net");
+  Object.values(edgeEl).forEach(o => o.g.classList.remove("hl"));
+  Object.values(nodeEl).forEach(g => g.classList.remove("hl"));
+  if (!id) { svg.classList.remove("dimmed"); return; }
+  svg.classList.add("dimmed");
+  nodeEl[id].classList.add("hl");
+  EDGES.forEach(e => { if (e.from === id || e.to === id) { edgeEl[e.from + ">" + e.to].g.classList.add("hl"); nodeEl[e.from].classList.add("hl"); nodeEl[e.to].classList.add("hl"); } });
+}
+
+// ---------- cascade ----------
+function cascade(id) {
+  const order = [{id, lvl: 0}], seen = new Set([id]);
+  let frontier = [order[0]];
+  while (frontier.length) {
+    const next = [];
+    for (const f of frontier) for (const c of children[f.id]) {
+      if (alive.has(c.id) && !seen.has(c.id)) { seen.add(c.id); const o = {id: c.id, lvl: f.lvl + 1, from: f.id, why: c.why, jump: c.jump}; next.push(o); order.push(o); }
+    }
+    frontier = next;
+  }
+  return order;
+}
+
+function spark(from, to) {
+  const src = edgeEl[from + ">" + to].p;
+  const s = el("path", {class: "spark", d: src.getAttribute("d")}, gS);
+  const len = s.getTotalLength();
+  s.style.strokeDasharray = `60 ${len + 60}`;
+  s.animate([{strokeDashoffset: 60}, {strokeDashoffset: -len}], {duration: STEP * .8, easing: "ease-in"}).onfinish = () => s.remove();
+}
+
+function burst(id) {
+  const N = byId[id];
+  for (let i = 0; i < 18; i++) {
+    const a = Math.random() * Math.PI * 2, r = 60 + Math.random() * 90;
+    const c = el("circle", {cx: N.x, cy: N.y, r: 2 + Math.random() * 4, fill: i % 3 ? "#66e6ff" : "#ff7d5c"}, gP);
+    c.animate([{transform: "translate(0,0)", opacity: 1}, {transform: `translate(${Math.cos(a) * r}px,${Math.sin(a) * r - 30}px)`, opacity: 0}],
+      {duration: 1400 + Math.random() * 600, easing: "cubic-bezier(.2,.7,.3,1)"}).onfinish = () => c.remove();
+  }
+}
+
+function kill(o) {
+  alive.delete(o.id);
+  goneWhy[o.id] = o.lvl === 0 ? {direct: true} : {from: o.from, why: o.why};
+  const g = nodeEl[o.id];
+  g.classList.remove("revive"); g.classList.add("dying");
+  burst(o.id);
+  setTimeout(() => { g.classList.remove("dying"); g.classList.add("gone"); }, 1100);
+  EDGES.forEach(e => { if (e.from === o.id || e.to === o.id) edgeEl[e.from + ">" + e.to].g.classList.add("dead"); });
+  addLog(o);
+  $("#alive").textContent = alive.size;
+}
+
+function remove(id) {
+  if (busy || !alive.has(id)) return;
+  busy = true; noteActivity();
+  touched.push(id);
+  const order = cascade(id);
+  lastRun = order;
+  selected = null; highlight(null);
+  Object.values(nodeEl).forEach(g => g.classList.remove("sel"));
+  const maxLvl = Math.max(...order.map(o => o.lvl));
+  order.forEach(o => {
+    if (o.from) setTimeout(() => spark(o.from, o.id), (o.lvl - 1) * STEP + STEP * .2);
+    setTimeout(() => kill(o), o.lvl * STEP);
+  });
+  renderInfo(null, {removing: id});
+  setTimeout(() => {
+    busy = false; renderInfo(null, {done: id});
+    if (pendingModal) { pendingModal = false; openModal(); }
+  }, maxLvl * STEP + 1200);
+}
+
+// ---------- 미션: 발명품을 10번 눌러 보면 방탈출 QR (형식: ESCAPE-2|발명) ----------
+const MISSION_GOAL = 10;          // 몇 번 눌러 보면 QR이 뜰지
+const QR_PREFIX = "ESCAPE-2|";    // 방탈출 앱이 읽는 코드
+// 방탈출 앱이 아는 목록. 철자를 앱과 똑같이! (목록을 바꾸면 방탈출 앱에도 같은 이름으로 퀴즈 추가)
+const QR_LIST = ["렌즈", "전기", "바퀴", "종이", "금속활자", "나침반"];
+// 이 화면의 발명품 → QR 값
+const QR_KEYS = {lens: "렌즈", battery: "전기", generator: "전기", wheel: "바퀴", paper: "종이", printing: "금속활자", compass: "나침반"};
+let removals = 0, touched = [], chosenKey = null, pendingModal = false, modalTimer = null;
+// 발명품을 누를 때마다 1씩 올라감
+function countTap(id) {
+  touched.push(id);
+  removals++; updateMission();
+  if (removals === MISSION_GOAL) {
+    // 방금 누른 발명 설명을 잠깐 보여 준 뒤 QR 창을 띄움 (도미노 중이면 끝난 뒤에)
+    clearTimeout(modalTimer);
+    modalTimer = setTimeout(() => { if (busy) pendingModal = true; else openModal(); }, 1500);
+  }
+}
+function updateMission() {
+  const m = $("#mission");
+  $("#mcount").textContent = Math.min(removals, MISSION_GOAL);
+  const done = removals >= MISSION_GOAL;
+  m.classList.toggle("done", done);
+  m.disabled = !done;
+  m.title = done ? "눌러서 QR 다시 보기" : `발명품을 ${MISSION_GOAL}번 눌러 보면 미션 완료`;
+}
+function openModal() {
+  $("#mDone").textContent = removals;
+  $("#modal").hidden = false;
+  showStep(chosenKey ? "qr" : "pick");
+}
+function showStep(step) {
+  $("#stepPick").hidden = step !== "pick";
+  $("#stepQR").hidden = step !== "qr";
+  if (step === "pick") renderPick();
+  else drawQR(QR_PREFIX + chosenKey);
+}
+function renderPick() {
+  // 내가 눌러 보거나 지운 발명 중 목록에 있는 것 (최근 것부터)
+  const mine = [...new Set(touched.slice().reverse().map(id => QR_KEYS[id]).filter(Boolean))];
+  const keys = mine.length ? mine : QR_LIST;
+  $("#pickMsg").textContent = mine.length ? "내가 살펴본 발명 중 QR에 담을 것을 하나 고르세요." : "아래 발명 중 가장 궁금한 것을 하나 고르세요.";
+  $("#pickList").innerHTML = keys.map(k => `<button type="button" class="big gold" data-key="${k}">${k}</button>`).join("");
+}
+$("#pickList").addEventListener("click", e => {
+  const b = e.target.closest("[data-key]");
+  if (!b || !QR_LIST.includes(b.dataset.key)) return;
+  chosenKey = b.dataset.key;
+  showStep("qr");
+});
+function drawQR(text) {
+  const cv = $("#qrCanvas"), ctx = cv.getContext("2d");
+  $("#qrWhat").textContent = josa(chosenKey, "을", "를");
+  $("#qrText").textContent = text;
+  if (typeof qrcode === "undefined") {
+    cv.width = cv.height = 10;
+    $("#qrText").textContent = "QR을 만들 수 없어요. 인터넷 연결을 확인해 주세요. (" + text + ")";
+    return;
+  }
+  qrcode.stringToBytes = qrcode.stringToBytesFuncs["UTF-8"];
+  const qr = qrcode(0, "M");
+  qr.addData(text, "Byte");
+  qr.make();
+  const n = qr.getModuleCount(), cell = 16, quiet = 2;
+  cv.width = cv.height = (n + quiet * 2) * cell;
+  ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, cv.width, cv.height);
+  ctx.fillStyle = "#000";
+  for (let r = 0; r < n; r++) for (let c = 0; c < n; c++)
+    if (qr.isDark(r, c)) ctx.fillRect((c + quiet) * cell, (r + quiet) * cell, cell, cell);
+}
+function nextPerson() {
+  $("#modal").hidden = true;
+  chosenKey = null; touched = []; pendingModal = false; clearTimeout(modalTimer);
+  removals = 0; updateMission();
+  svg.classList.remove("jumpmode"); $("#jumpBtn").setAttribute("aria-pressed", "false");
+  k = 1; tx = ty = 0; apply();
+  resetAll();
+}
+$("#backPick").onclick = () => showStep("pick");
+$("#nextPerson").onclick = nextPerson;
+$("#mission").onclick = () => { if (removals >= MISSION_GOAL) openModal(); };
+
+function addLog(o) {
+  const ol = $("#log");
+  const empty = ol.querySelector(".empty"); if (empty) empty.remove();
+  const li = document.createElement("li");
+  if (o.lvl === 0) li.innerHTML = `<b>${nm(o.id)}</b> 지움<em>여기서 도미노가 시작돼요.</em>`;
+  else {
+    const fa = byId[o.from].f, fb = byId[o.id].f;
+    const cross = fa !== fb ? `<span class="cross">${LANES[fa].name} → ${LANES[fb].name}</span>` : "";
+    li.innerHTML = `<b>${nm(o.id)}</b> 사라짐${cross}<em>${josa(nm(o.from), "이", "가")} 없어서 · ${o.why}</em>`;
+  }
+  ol.appendChild(li);
+  ol.scrollTo({top: ol.scrollHeight, behavior: "smooth"});
+}
+
+function resetAll() {
+  if (busy) return;
+  DATA.forEach(n => {
+    const g = nodeEl[n.id];
+    if (!alive.has(n.id)) { g.classList.remove("gone"); g.classList.add("revive"); setTimeout(() => g.classList.remove("revive"), 1000); }
+    alive.add(n.id);
+  });
+  Object.values(edgeEl).forEach(o => o.g.classList.remove("dead"));
+  for (const k in goneWhy) delete goneWhy[k];
+  $("#log").innerHTML = '<li class="empty">아직 사라진 발명품이 없어요.</li>';
+  $("#alive").textContent = alive.size;
+  select(null);
+}
+
+// ---------- panel ----------
+function select(id) {
+  if (busy) return;
+  if (id) countTap(id);
+  selected = id;
+  Object.values(nodeEl).forEach(g => g.classList.remove("sel"));
+  if (id) nodeEl[id].classList.add("sel");
+  highlight(id);
+  renderInfo(id);
+  noteActivity();
+}
+
+function chips(list) {
+  return list.map(([id, why, jump]) => `<li class="${jump ? "jump" : ""}"><button class="chip" data-go="${id}">${nm(id)}</button> <span>${jump ? "★ " + LANES[byId[id].f].name + " · " : ""}${why}</span></li>`).join("");
+}
+
+function renderInfo(id, state = {}) {
+  const box = $("#info");
+  if (state.removing) {
+    box.innerHTML = `<p class="eyebrow">도미노 진행 중</p><h2>${nm(state.removing)}</h2><p class="desc">연결된 발명품들이 차례로 사라지고 있어요…</p>`;
+    return;
+  }
+  if (state.done) {
+    const n = lastRun.length - 1;
+    const fields = new Set(lastRun.slice(1).map(o => byId[o.id].f));
+    fields.delete(byId[state.done].f);
+    const fieldText = fields.size ? `<p class="desc">다른 분야 <b style="color:var(--gold)">${fields.size}곳</b>까지 번졌어요: ${[...fields].map(f => LANES[f].name).join(", ")}</p>` : "";
+    box.innerHTML = `<p class="eyebrow">결과</p><h2>${josa(nm(state.done), "을", "를")} 지웠더니</h2>
+      <p class="desc">${n ? `발명품 <b style="color:var(--ember)">${n}개</b>가 함께 사라졌어요.` : "다른 발명품은 사라지지 않았어요. 이 발명품에 기대는 발명이 없었거든요."}</p>
+      ${fieldText}
+      <p class="desc" style="color:var(--muted)">아래 기록에서 이유를 확인하거나, 다른 점을 골라 보세요.</p>`;
+    return;
+  }
+  if (!id) {
+    box.innerHTML = `<p class="eyebrow">사용법</p><h2>점 하나를 골라 보세요</h2>
+      <p class="desc">점은 발명품, 선은 그 발명이 다음 발명에 준 영향이에요. 가로줄은 분야예요. <span style="color:var(--gold)">★ 금색 선</span>은 한 분야의 발명이 전혀 다른 분야의 발명으로 건너간 경우예요.</p>
+      <p class="desc">하나를 지우면 그것 없이는 태어날 수 없었던 발명품이 차례로 사라져요.</p>
+      <p class="desc" style="color:var(--muted);font-size:.95rem">화면을 끌어서 옮기고, 오른쪽 아래 +/− 버튼으로 확대할 수 있어요.</p>
+      <h3>이것부터 지워 볼까요?</h3><div class="picks">${PICKS.filter(p => alive.has(p)).map(p => `<button class="chip" data-go="${p}">${nm(p)}</button>`).join("")}</div>`;
+    return;
+  }
+  const n = byId[id];
+  const reqs = n.req.map(([p, why]) => [p, why, EDGES.find(e => e.from === p && e.to === id).jump]);
+  const kids = children[id].map(c => [c.id, c.why, c.jump]);
+  let html = `<p class="eyebrow"><span class="field">${LANES[n.f].name}</span>${alive.has(id) ? "선택한 발명품" : "사라진 발명품"}</p><h2>${plain(n.name)}</h2><p class="yr">${n.yr}</p><p class="desc">${n.d}</p>`;
+  if (alive.has(id)) {
+    const cnt = cascade(id).length - 1;
+    html += `<button class="danger" id="del">‘${plain(n.name)}’ 지우기</button><p class="preview">함께 사라질 발명품 <b>${cnt}</b>개</p>`;
+  } else {
+    const w = goneWhy[id];
+    html += `<div class="goneNote">${w && w.direct ? "직접 지운 발명품이에요." : `${josa(nm(w.from), "이", "가")} 사라져서 함께 사라졌어요. (${w.why})`}</div>`;
+  }
+  if (reqs.length) html += `<h3>있어야 했던 발명</h3><ul>${chips(reqs)}</ul>`;
+  if (kids.length > 4) html += `<h3>덕분에 생긴 발명 ${kids.length}개</h3><div class="picks">${kids.map(([k, , j]) => `<button class="chip${j ? " jchip" : ""}" data-go="${k}">${j ? "★ " : ""}${nm(k)}</button>`).join("")}</div>`;
+  else if (kids.length) html += `<h3>덕분에 생긴 발명</h3><ul>${chips(kids)}</ul>`;
+  box.innerHTML = html;
+  const del = $("#del"); if (del) del.onclick = () => remove(id);
+}
+$("#info").addEventListener("click", e => { const b = e.target.closest("[data-go]"); if (b) select(b.dataset.go); });
+
+// ---------- pan / zoom ----------
+const svg = $("#net"), vp = $("#vp");
+let k = 1, tx = 0, ty = 0, drag = null;
+const apply = () => vp.setAttribute("transform", `translate(${tx},${ty}) scale(${k})`);
+const toSvg = (cx, cy) => { const p = svg.createSVGPoint(); p.x = cx; p.y = cy; return p.matrixTransform(svg.getScreenCTM().inverse()); };
+function zoomAt(f, cx, cy) {
+  const p = toSvg(cx, cy), nk = Math.min(3, Math.max(.6, k * f));
+  tx = p.x - (p.x - tx) * nk / k; ty = p.y - (p.y - ty) * nk / k; k = nk; apply();
+}
+svg.addEventListener("pointerdown", e => {
+  drag = {x: e.clientX, y: e.clientY, tx, ty, moved: false, node: e.target.closest(".node")};
+  svg.setPointerCapture(e.pointerId);
+});
+svg.addEventListener("pointermove", e => {
+  if (!drag) return;
+  const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+  if (!drag.moved && Math.hypot(dx, dy) > 8) { drag.moved = true; svg.classList.add("panning"); }
+  if (drag.moved) { const u = 1 / svg.getScreenCTM().a; tx = drag.tx + dx * u; ty = drag.ty + dy * u; apply(); }
+});
+svg.addEventListener("pointerup", () => {
+  if (drag && !drag.moved) select(drag.node ? drag.node.dataset.id : null);
+  drag = null; svg.classList.remove("panning");
+});
+svg.addEventListener("pointercancel", () => { drag = null; svg.classList.remove("panning"); });
+svg.addEventListener("wheel", e => { e.preventDefault(); zoomAt(e.deltaY < 0 ? 1.15 : 1 / 1.15, e.clientX, e.clientY); }, {passive: false});
+const center = () => { const r = svg.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; };
+$("#zin").onclick = () => zoomAt(1.25, ...center());
+$("#zout").onclick = () => zoomAt(1 / 1.25, ...center());
+$("#zfit").onclick = () => { k = 1; tx = ty = 0; apply(); };
+$("#reset").onclick = resetAll;
+$("#jumpBtn").onclick = e => {
+  const on = svg.classList.toggle("jumpmode");
+  e.currentTarget.setAttribute("aria-pressed", on);
+  noteActivity();
+};
+$("#fs").onclick = () => {
+  const d = document;
+  if (d.fullscreenElement) d.exitFullscreen().catch(() => {});
+  else d.documentElement.requestFullscreen?.().catch(() => {});
+};
+
+// 전시용: 3분 동안 아무도 만지지 않으면 다음 사람을 위해 처음 상태로 되돌림
+let idleTimer;
+function noteActivity() { clearTimeout(idleTimer); idleTimer = setTimeout(() => { if (!busy) nextPerson(); else noteActivity(); }, 180000); }
+document.addEventListener("pointerdown", noteActivity);
+document.addEventListener("keydown", noteActivity);
+
+$("#mgoal").textContent = MISSION_GOAL;
+updateMission();
+$("#alive").textContent = alive.size;
+renderInfo(null);
+</script>
