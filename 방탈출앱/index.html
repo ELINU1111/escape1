@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#14110f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>발명센터 방탈출</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700;900&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
+<style>
+:root{
+  --bg:#14110f; --panel:#221c18; --panel2:#2d251f; --line:#3d332b;
+  --text:#f3ece4; --muted:#a8998a; --gold:#f2b84b; --gold2:#ffd98a;
+  --ok:#5fd08a; --bad:#ff6b6b;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+  font-family:'Noto Sans KR',system-ui,-apple-system,sans-serif;overscroll-behavior:none}
+body{min-height:100dvh}
+.screen{display:none;min-height:100dvh;padding:calc(24px + env(safe-area-inset-top)) 20px calc(24px + env(safe-area-inset-bottom));
+  max-width:480px;margin:0 auto;flex-direction:column}
+.screen.active{display:flex}
+h1{font-size:30px;font-weight:900;margin:0 0 6px;letter-spacing:-.5px}
+h2{font-size:22px;font-weight:900;margin:0 0 14px}
+.sub{color:var(--muted);font-size:15px;line-height:1.5;margin:0 0 24px}
+.logo{font-size:56px;text-align:center;margin:28px 0 8px;filter:drop-shadow(0 0 18px rgba(242,184,75,.45))}
+.center{text-align:center}
+label{display:block;font-size:14px;color:var(--muted);margin:0 0 6px;font-weight:700}
+input{width:100%;font:inherit;font-size:18px;padding:15px 16px;border-radius:14px;border:1.5px solid var(--line);
+  background:var(--panel);color:var(--text);outline:none;margin-bottom:16px}
+input:focus{border-color:var(--gold)}
+.btn{display:block;width:100%;border:0;border-radius:16px;padding:17px;font:inherit;font-size:18px;font-weight:900;
+  background:var(--gold);color:#241a0c;cursor:pointer;transition:transform .1s}
+.btn:active{transform:scale(.97)}
+.btn.ghost{background:var(--panel2);color:var(--text);border:1.5px solid var(--line)}
+.btn + .btn{margin-top:12px}
+.spacer{flex:1}
+.err{color:var(--bad);font-size:14px;min-height:20px;margin:-6px 0 10px}
+
+/* 메인 */
+.topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
+.who{font-size:14px;color:var(--muted)}
+.who b{color:var(--text);font-size:17px}
+.iconbtn{background:var(--panel2);border:1px solid var(--line);color:var(--muted);border-radius:12px;padding:8px 12px;font:inherit;font-size:13px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:18px;margin-bottom:16px}
+.progress-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px}
+.progress-head span{color:var(--gold);font-weight:900;font-size:20px}
+.bar{height:8px;background:var(--panel2);border-radius:99px;overflow:hidden;margin-bottom:16px}
+.bar i{display:block;height:100%;background:linear-gradient(90deg,var(--gold),var(--gold2));width:0;transition:width .5s}
+.slots{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:10px}
+.slot{aspect-ratio:1;border-radius:16px;background:var(--panel2);border:1.5px dashed var(--line);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.slot .ch{font-size:34px;font-weight:900;color:var(--line)}
+.slot .nm{font-size:11px;color:var(--muted)}
+.slot.found{border-style:solid;border-color:var(--gold);background:#3a2c18}
+.slot.found .ch{color:var(--gold2)}
+.hint{font-size:14px;color:var(--muted);line-height:1.6;margin:0}
+
+/* 카메라 */
+#cam{padding:0;max-width:none;background:#000;position:relative;overflow:hidden;height:100dvh}
+#video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+#overlay{position:absolute;inset:0;width:100%;height:100%}
+.cam-top{position:absolute;left:0;right:0;top:0;padding:calc(12px + env(safe-area-inset-top)) 16px 30px;
+  background:linear-gradient(#000c,#0000);display:flex;justify-content:space-between;align-items:center;z-index:2}
+.cam-top .iconbtn{background:#0008;color:#fff;border-color:#fff3;font-size:15px}
+.pill{background:#0008;border:1px solid #fff3;border-radius:99px;padding:7px 14px;font-size:14px;font-weight:700}
+.pill b{color:var(--gold)}
+.reticle{position:absolute;left:50%;top:46%;width:62vw;max-width:300px;aspect-ratio:1;transform:translate(-50%,-50%);
+  border-radius:24px;pointer-events:none;z-index:1;
+  background:
+   linear-gradient(var(--gold),var(--gold)) top left/34px 4px no-repeat,
+   linear-gradient(var(--gold),var(--gold)) top left/4px 34px no-repeat,
+   linear-gradient(var(--gold),var(--gold)) top right/34px 4px no-repeat,
+   linear-gradient(var(--gold),var(--gold)) top right/4px 34px no-repeat,
+   linear-gradient(var(--gold),var(--gold)) bottom left/34px 4px no-repeat,
+   linear-gradient(var(--gold),var(--gold)) bottom left/4px 34px no-repeat,
+   linear-gradient(var(--gold),var(--gold)) bottom right/34px 4px no-repeat,
+   linear-gradient(var(--gold),var(--gold)) bottom right/4px 34px no-repeat;opacity:.8}
+.cam-bottom{position:absolute;left:0;right:0;bottom:0;padding:40px 16px calc(20px + env(safe-area-inset-bottom));
+  background:linear-gradient(#0000,#000d);text-align:center;z-index:2}
+#status{font-size:16px;font-weight:700;min-height:24px}
+#status small{display:block;color:#ccc;font-weight:400;font-size:13px;margin-top:4px}
+.meter{height:6px;background:#fff2;border-radius:99px;overflow:hidden;margin:10px auto 0;max-width:260px}
+.meter i{display:block;height:100%;width:0;background:var(--gold);transition:width .15s}
+.loading{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;
+  background:#000c;z-index:3;text-align:center;padding:24px;font-size:15px;line-height:1.6}
+.spin{width:44px;height:44px;border:4px solid #fff2;border-top-color:var(--gold);border-radius:50%;animation:sp 1s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+
+/* 모달 */
+.modal{position:fixed;inset:0;background:#000b;display:none;align-items:center;justify-content:center;z-index:10;padding:24px}
+.modal.show{display:flex}
+.mcard{background:var(--panel);border:2px solid var(--gold);border-radius:24px;padding:28px 22px 22px;width:100%;max-width:360px;
+  text-align:center;animation:pop .45s cubic-bezier(.2,1.4,.4,1)}
+@keyframes pop{from{transform:scale(.6);opacity:0}}
+.mcard .key{font-size:54px;animation:wig 1.2s ease-in-out infinite}
+@keyframes wig{50%{transform:rotate(-14deg) scale(1.08)}}
+.mcard .t{font-size:22px;font-weight:900;color:var(--gold);margin:6px 0 4px}
+.mcard .from{color:var(--muted);font-size:14px;margin-bottom:12px}
+.mcard .big{font-size:84px;font-weight:900;line-height:1.1;margin:6px 0 18px;color:var(--gold2);
+  text-shadow:0 0 24px rgba(242,184,75,.55)}
+
+.qq{font-size:17px;font-weight:700;line-height:1.5;margin:6px 0 14px;text-align:left}
+.qopt{display:block;width:100%;text-align:left;font:inherit;font-size:16px;padding:13px 14px;margin-bottom:8px;border-radius:12px;
+  background:var(--panel2);border:1.5px solid var(--line);color:var(--text)}
+.qopt.wrong{border-color:var(--bad);animation:shake .35s}
+@keyframes shake{25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+.qmsg{font-size:14px;color:var(--muted);min-height:20px;margin:4px 0 12px}
+.qmsg.bad{color:var(--bad)}
+.slot .st{font-size:10px;color:var(--muted);opacity:.8}
+
+/* 정답 */
+.answer-input{font-size:30px;text-align:center;font-weight:900;letter-spacing:6px;padding:18px}
+.letters{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:6px 0 22px}
+.letters span{min-width:48px;height:48px;border-radius:12px;background:var(--panel2);border:1px solid var(--line);
+  display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:900;color:var(--gold2)}
+#doneBtn{display:none;background:linear-gradient(135deg,#5fd08a,#2fae69);color:#06210f;animation:pop .5s cubic-bezier(.2,1.4,.4,1), glow 1.6s ease-in-out infinite}
+@keyframes glow{50%{box-shadow:0 0 0 8px rgba(95,208,138,.2)}}
+#doneBtn.show{display:block}
+.answer-msg{text-align:center;min-height:22px;font-size:15px;margin-bottom:12px;color:var(--muted)}
+.answer-msg.ok{color:var(--ok);font-weight:700}
+
+/* 완료 */
+.trophy{font-size:88px;text-align:center;margin:30px 0 4px;animation:pop .6s cubic-bezier(.2,1.4,.4,1)}
+.rows{display:grid;grid-template-columns:auto 1fr;gap:10px 16px;font-size:16px}
+.rows dt{color:var(--muted)}
+.rows dd{margin:0;font-weight:700;text-align:right}
+.confetti{position:fixed;top:-20px;width:10px;height:14px;z-index:20;pointer-events:none;animation:fall linear forwards}
+@keyframes fall{to{transform:translateY(110vh) rotate(720deg)}}
+</style>
+</head>
+<body>
+
+<!-- 1. 사용자 정보 -->
+<section class="screen" id="reg">
+  <div class="logo">🗝️</div>
+  <h1 class="center" id="appTitle">발명센터 방탈출</h1>
+  <p class="sub center">숨겨진 열쇠를 카메라로 찾아<br>마지막 암호를 풀어라!</p>
+  <label for="iName">이름</label>
+  <input id="iName" autocomplete="off" placeholder="홍길동">
+  <label for="iSchool">학교</label>
+  <input id="iSchool" autocomplete="off" placeholder="○○초등학교">
+  <label for="iNick">별명</label>
+  <input id="iNick" autocomplete="off" placeholder="탈출왕" maxlength="12">
+  <div class="err" id="regErr"></div>
+  <div class="spacer"></div>
+  <button class="btn" id="startBtn">게임 시작</button>
+</section>
+
+<!-- 2. 메인 -->
+<section class="screen" id="main">
+  <div class="topbar">
+    <div class="who"><b id="mNick"></b> 탐험가<br><span id="mSchool"></span></div>
+    <button class="iconbtn" id="resetBtn">처음부터</button>
+  </div>
+  <div class="card">
+    <div class="progress-head"><b>찾은 열쇠</b><span id="mCount">0 / 0</span></div>
+    <div class="bar"><i id="mBar"></i></div>
+    <div class="slots" id="slots"></div>
+  </div>
+  <div class="card">
+    <p class="hint">📷 방 안 곳곳의 물건에 카메라를 비춰 보세요.<br>열쇠가 숨겨진 물건을 찾으면 글자가 나타납니다.<br>모은 글자로 <b style="color:var(--gold)">마지막 암호</b>를 맞혀 탈출하세요!</p>
+  </div>
+  <div class="spacer"></div>
+  <button class="btn" id="scanBtn">📷 열쇠 찾기 (카메라)</button>
+  <button class="btn ghost" id="toAnswerBtn">🔐 암호 입력하기</button>
+</section>
+
+<!-- 3. 카메라 -->
+<section class="screen" id="cam">
+  <video id="video" playsinline muted autoplay></video>
+  <canvas id="overlay"></canvas>
+  <div class="reticle"></div>
+  <div class="cam-top">
+    <button class="iconbtn" id="camBack">← 뒤로</button>
+    <div class="pill">🔑 <b id="camCount">0/0</b></div>
+  </div>
+  <div class="cam-bottom">
+    <div id="status">물건을 네모 안에 비춰 보세요</div>
+    <div class="meter"><i id="meter"></i></div>
+  </div>
+  <div class="loading" id="camLoading"><div class="spin"></div><div id="camLoadingText">AI 모델 불러오는 중…<br><small>처음 한 번은 몇 초 걸릴 수 있어요</small></div></div>
+</section>
+
+<!-- 4. 정답 입력 -->
+<section class="screen" id="answer">
+  <div class="topbar">
+    <button class="iconbtn" id="ansBack">← 뒤로</button>
+    <div></div>
+  </div>
+  <div class="logo" style="margin-top:6px">🔐</div>
+  <h2 class="center">마지막 암호</h2>
+  <p class="sub center" style="margin-bottom:12px">지금까지 모은 글자</p>
+  <div class="letters" id="letters"></div>
+  <input class="answer-input" id="ansInput" autocomplete="off" autocapitalize="off" placeholder="암호 입력">
+  <div class="answer-msg" id="ansMsg">글자를 올바른 순서로 조합해 보세요</div>
+  <div class="spacer"></div>
+  <button class="btn" id="doneBtn">🏆 미션 완료!</button>
+</section>
+
+<!-- 5. 완료 -->
+<section class="screen" id="done">
+  <div class="trophy">🏆</div>
+  <h1 class="center">탈출 성공!</h1>
+  <p class="sub center" id="doneMsg"></p>
+  <div class="card">
+    <dl class="rows">
+      <dt>이름</dt><dd id="dName"></dd>
+      <dt>학교</dt><dd id="dSchool"></dd>
+      <dt>별명</dt><dd id="dNick"></dd>
+      <dt>찾은 열쇠</dt><dd id="dKeys"></dd>
+      <dt>걸린 시간</dt><dd id="dTime"></dd>
+    </dl>
+  </div>
+  <p class="hint center">이 화면을 선생님께 보여주세요 😊</p>
+  <div class="spacer"></div>
+  <button class="btn ghost" id="againBtn">처음부터 다시 하기</button>
+</section>
+
+<!-- 열쇠 발견 모달 -->
+<div class="modal" id="foundModal">
+  <div class="mcard">
+    <div class="key">🔑</div>
+    <div class="t">방탈출 열쇠 발견!</div>
+    <div class="from" id="fFrom"></div>
+    <div id="quizBox">
+      <div class="qq" id="qQ"></div>
+      <div id="qOpts"></div>
+      <div class="qmsg" id="qMsg">퀴즈를 맞히면 글자가 열립니다</div>
+    </div>
+    <div id="revealBox">
+      <div>답은</div>
+      <div class="big" id="fChar"></div>
+      <button class="btn" id="fContinue">계속 찾기</button>
+    </div>
+    <button class="btn ghost" id="fHome">목록 보기</button>
+  </div>
+</div>
+
+<script>
+/* =====================================================================
+   ★ 게임 설정 — 여기만 고치면 됩니다 ★
+   ===================================================================== */
+const CONFIG = {
+  title: '발명센터 방탈출',
+  finalAnswer: '불편함',          // 마지막 암호
+
+  // 인식 방식
+  //  'coco'      : 내장 AI 모델 (컵·책·가위 등 일상 사물 80종, 별도 학습 불필요)
+  //  'teachable' : 구글 Teachable Machine으로 직접 학습시킨 모델 (우리만의 물건 인식)
+  mode: 'coco',
+  teachableModelUrl: '',          // 예: 'https://teachablemachine.withgoogle.com/models/AbCdEf123/'
+
+  minScore: 0.6,                  // 이 확률 이상이어야 인정 (teachable 모드면 0.9 정도 추천)
+  holdFrames: 4,                  // 연속 몇 번 인식되어야 열쇠 발견으로 인정할지 (오인식 방지)
+
+  // 열쇠 목록
+  //  label  : 모델이 내놓는 이름 (coco는 영어 클래스명, teachable은 내가 붙인 클래스 이름)
+  //  name   : 화면에 보일 물건 이름
+  //  stage  : 어느 꼭지의 열쇠인지 (화면 표시용)
+  //  answer : 찾았을 때 알려줄 글자
+  //  quiz   : (선택) 글자를 보여주기 전에 풀 퀴즈. 필요 없으면 이 줄을 지우세요.
+  keys: [
+    { label: 'book', name: '책', stage: '1. 발명과 불편함', answer: '불',
+      quiz: { q: '1377년 청주 흥덕사에서 간행된, 현존하는 세계에서 가장 오래된 금속활자본은?',
+              options: ['직지', '팔만대장경', '훈민정음', '동의보감'], correct: 0 } },
+    { label: 'clock', name: '시계', stage: '2. 발명이 없다면', answer: '편',
+      quiz: { q: '렌즈가 발명되지 않았다면 함께 사라졌을 발명은?',
+              options: ['현미경', '바퀴', '종이', '나침반'], correct: 0 } },
+    { label: 'scissors', name: '가위', stage: '3. 발명의 시작과 우리의 발명', answer: '함',
+      quiz: { q: '많은 발명은 무엇에서 시작되었을까요?',
+              options: ['생활 속 불편함', '우연한 사고만', '돈을 벌 생각만', '정답 없음'], correct: 0 } },
+  ],
+};
+/* ===================================================================== */
+
+const COCO_KO = {person:'사람',bicycle:'자전거',car:'자동차',motorcycle:'오토바이',airplane:'비행기',bus:'버스',train:'기차',truck:'트럭',boat:'보트','traffic light':'신호등','fire hydrant':'소화전','stop sign':'정지 표지판','parking meter':'주차미터',bench:'벤치',bird:'새',cat:'고양이',dog:'개',horse:'말',sheep:'양',cow:'소',elephant:'코끼리',bear:'곰',zebra:'얼룩말',giraffe:'기린',backpack:'배낭',umbrella:'우산',handbag:'핸드백',tie:'넥타이',suitcase:'여행가방',frisbee:'원반',skis:'스키',snowboard:'스노보드','sports ball':'공',kite:'연',
+'baseball bat':'야구 배트','baseball glove':'야구 글러브',skateboard:'스케이트보드',surfboard:'서핑보드','tennis racket':'테니스 라켓',bottle:'병','wine glass':'와인잔',cup:'컵',fork:'포크',knife:'칼',spoon:'숟가락',bowl:'그릇',banana:'바나나',apple:'사과',sandwich:'샌드위치',orange:'오렌지',broccoli:'브로콜리',carrot:'당근','hot dog':'핫도그',pizza:'피자',donut:'도넛',cake:'케이크',chair:'의자',couch:'소파','potted plant':'화분',bed:'침대','dining table':'식탁',toilet:'변기',tv:'TV',laptop:'노트북',mouse:'마우스',remote:'리모컨',keyboard:'키보드','cell phone':'휴대폰',microwave:'전자레인지',oven:'오븐',toaster:'토스터',sink:'싱크대',refrigerator:'냉장고',book:'책',clock:'시계',vase:'꽃병',scissors:'가위','teddy bear':'곰인형','hair drier':'드라이기',toothbrush:'칫솔'};
+
+const $ = id => document.getElementById(id);
+const STORE_KEY = 'escape-room-v1';
+let state = { user: null, found: [], startedAt: null, finishedAt: null };
+
+function save(){ try{ localStorage.setItem(STORE_KEY, JSON.stringify(state)); }catch(e){} }
+function load(){ try{ const s = JSON.parse(localStorage.getItem(STORE_KEY)); if(s && s.user) state = s; }catch(e){} }
+
+function show(id){
+  document.querySelectorAll('.screen').forEach(s => s.classList.toggle('active', s.id === id));
+  if(id !== 'cam') stopCamera();
+  window.scrollTo(0,0);
+}
+
+/* ---------- 1. 등록 ---------- */
+$('appTitle').textContent = CONFIG.title;
+document.title = CONFIG.title;
+$('startBtn').onclick = () => {
+  const name = $('iName').value.trim(), school = $('iSchool').value.trim(), nick = $('iNick').value.trim();
+  if(!name || !school || !nick){ $('regErr').textContent = '이름, 학교, 별명을 모두 입력해 주세요.'; return; }
+  state = { user:{name,school,nick}, found:[], startedAt: Date.now(), finishedAt:null };
+  save(); renderMain(); show('main'); preloadModel();
+};
+
+/* ---------- 2. 메인 ---------- */
+function renderMain(){
+  const u = state.user;
+  $('mNick').textContent = u.nick; $('mSchool').textContent = u.school + ' · ' + u.name;
+  const total = CONFIG.keys.length, n = state.found.length;
+  $('mCount').textContent = `${n} / ${total}`;
+  $('mBar').style.width = (n/total*100) + '%';
+  $('slots').innerHTML = CONFIG.keys.map(k => {
+    const f = state.found.includes(k.label);
+    return `<div class="slot ${f?'found':''}"><div class="ch">${f?k.answer:'?'}</div><div class="nm">${f?k.name:'열쇠'}</div>${k.stage?`<div class="st">${k.stage.split('.')[0]}꼭지</div>`:''}</div>`;
+  }).join('');
+  $('camCount').textContent = `${n}/${total}`;
+}
+$('scanBtn').onclick = () => { show('cam'); startCamera(); };
+$('toAnswerBtn').onclick = () => { renderAnswer(); show('answer'); };
+$('resetBtn').onclick = $('againBtn').onclick = () => {
+  if(!confirm('처음부터 다시 시작할까요? 기록이 지워집니다.')) return;
+  try{ localStorage.removeItem(STORE_KEY); }catch(e){}
+  state = { user:null, found:[], startedAt:null, finishedAt:null };
+  ['iName','iSchool','iNick'].forEach(i => $(i).value=''); $('regErr').textContent='';
+  show('reg');
+};
+
+/* ---------- 3. 카메라 + 인식 ---------- */
+let model = null, modelPromise = null, tmLabels = [];
+let stream = null, running = false, paused = false;
+const hold = {};   // label → 연속 인식 횟수
+
+function preloadModel(){
+  if(modelPromise) return modelPromise;
+  modelPromise = (async () => {
+    await tf.ready();
+    if(CONFIG.mode === 'teachable'){
+      let base = CONFIG.teachableModelUrl; if(!base.endsWith('/')) base += '/';
+      model = await tf.loadLayersModel(base + 'model.json');
+      const meta = await (await fetch(base + 'metadata.json')).json();
+      tmLabels = meta.labels;
+    } else {
+      model = await cocoSsd.load({ base: 'lite_mobilenet_v2' });
+    }
+    return model;
+  })();
+  modelPromise.catch(() => { modelPromise = null; });
+  return modelPromise;
+}
+
+async function startCamera(){
+  paused = false; Object.keys(hold).forEach(k => hold[k]=0);
+  $('camLoading').style.display = 'flex';
+  $('camLoadingText').innerHTML = '카메라 켜는 중…';
+  try{
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia)
+      throw new Error('이 브라우저는 카메라를 지원하지 않거나, https 주소가 아닙니다.');
+    stream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:{ideal:'environment'}, width:{ideal:1280}, height:{ideal:720} }, audio:false });
+    const v = $('video'); v.srcObject = stream; await v.play();
+    $('camLoadingText').innerHTML = 'AI 모델 불러오는 중…<br><small>처음 한 번은 몇 초 걸릴 수 있어요</small>';
+    await preloadModel();
+    if(!stream) return;               // 로딩 중 뒤로 나감
+    $('camLoading').style.display = 'none';
+    running = true; loop();
+  }catch(e){
+    console.error(e);
+    $('camLoadingText').innerHTML = '⚠️ 시작할 수 없어요<br><small>' + (e.name==='NotAllowedError' ? '카메라 권한을 허용해 주세요.' : (e.message||e)) + '</small><br><br><button class="btn" onclick="show(\'main\')">돌아가기</button>';
+  }
+}
+function stopCamera(){
+  running = false;
+  if(stream){ stream.getTracks().forEach(t => t.stop()); stream = null; }
+  const c = $('overlay'); c.getContext('2d').clearRect(0,0,c.width,c.height);
+}
+$('camBack').onclick = () => { renderMain(); show('main'); };
+
+async function loop(){
+  if(!running) return;
+  const v = $('video');
+  if(!paused && v.readyState >= 2){
+    try{
+      const results = CONFIG.mode === 'teachable' ? predictTM(v) : await detectCoco(v);
+      handle(results);
+    }catch(e){ console.error(e); }
+  }
+  setTimeout(() => requestAnimationFrame(loop), 80);
+}
+
+// 결과 형식: [{label, score, bbox?:[x,y,w,h]}]
+async function detectCoco(v){
+  const preds = await model.detect(v, 10, 0.35);
+  return preds.map(p => ({ label:p.class, score:p.score, bbox:p.bbox }));
+}
+function predictTM(v){
+  return tf.tidy(() => {
+    const img = tf.browser.fromPixels(v);
+    const [h,w] = img.shape; const s = Math.min(h,w);
+    const crop = img.slice([Math.floor((h-s)/2), Math.floor((w-s)/2), 0], [s, s, 3]);
+    const x = tf.image.resizeBilinear(crop, [224,224]).toFloat().div(127.5).sub(1).expandDims(0);
+    const probs = model.predict(x).dataSync();
+    return tmLabels.map((label,i) => ({ label, score: probs[i] }));
+  });
+}
+
+const keyByLabel = Object.fromEntries(CONFIG.keys.map(k => [k.label, k]));
+
+function handle(results){
+  draw(results);
+  // 가장 확실한 '열쇠' 물체 찾기 (아직 못 찾은 것 우선)
+  const cands = results.filter(r => keyByLabel[r.label]).sort((a,b) => b.score - a.score);
+  const best = cands.find(r => !state.found.includes(r.label)) || cands[0];
+  const seen = new Set();
+  if(best && best.score >= CONFIG.minScore){
+    seen.add(best.label);
+    hold[best.label] = (hold[best.label]||0) + 1;
+  }
+  Object.keys(hold).forEach(k => { if(!seen.has(k)) hold[k] = 0; });
+
+  const st = $('status');
+  if(best && best.score >= CONFIG.minScore){
+    const k = keyByLabel[best.label];
+    if(state.found.includes(k.label)){
+      st.innerHTML = `✅ ${k.name} — 이미 찾은 열쇠예요 ('${k.answer}')<small>다른 물건을 찾아보세요</small>`;
+      $('meter').style.width = '0%';
+    } else {
+      const pct = Math.min(1, hold[best.label] / CONFIG.holdFrames);
+      st.innerHTML = `🔍 무언가 반응하고 있어요…<small>그대로 잠시 비춰 주세요</small>`;
+      $('meter').style.width = (pct*100) + '%';
+      if(hold[best.label] >= CONFIG.holdFrames) found(k);
+    }
+  } else {
+    const other = results.filter(r => r.score >= 0.5).sort((a,b)=>b.score-a.score)[0];
+    st.innerHTML = other && CONFIG.mode==='coco'
+      ? `${nameOf(other.label)} 같아요… 열쇠는 아닌가 봐요<small>다른 물건을 비춰 보세요</small>`
+      : `물건을 네모 안에 비춰 보세요`;
+    $('meter').style.width = '0%';
+  }
+}
+function nameOf(label){ return keyByLabel[label]?.name || COCO_KO[label] || label; }
+
+function draw(results){
+  const c = $('overlay'), v = $('video'), dpr = window.devicePixelRatio||1;
+  const cw = c.clientWidth, ch = c.clientHeight;
+  if(c.width !== cw*dpr || c.height !== ch*dpr){ c.width = cw*dpr; c.height = ch*dpr; }
+  const ctx = c.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,cw,ch);
+  if(CONFIG.mode !== 'coco') return;
+  // object-fit: cover 좌표 변환
+  const vw = v.videoWidth, vh = v.videoHeight; if(!vw) return;
+  const sc = Math.max(cw/vw, ch/vh), ox = (cw - vw*sc)/2, oy = (ch - vh*sc)/2;
+  results.forEach(r => {
+    if(r.score < 0.5 || !r.bbox) return;
+    const [x,y,w,h] = r.bbox; const X = x*sc+ox, Y = y*sc+oy, W = w*sc, H = h*sc;
+    const isKey = !!keyByLabel[r.label] && r.score >= CONFIG.minScore;
+    ctx.lineWidth = isKey ? 4 : 2;
+    ctx.strokeStyle = isKey ? '#f2b84b' : 'rgba(255,255,255,.45)';
+    ctx.beginPath(); ctx.roundRect ? ctx.roundRect(X,Y,W,H,12) : ctx.rect(X,Y,W,H); ctx.stroke();
+    if(!isKey){
+      const t = `${nameOf(r.label)} ${Math.round(r.score*100)}%`;
+      ctx.font = '600 13px "Noto Sans KR",sans-serif';
+      const tw = ctx.measureText(t).width + 12;
+      ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(X, Math.max(0,Y-22), tw, 22);
+      ctx.fillStyle = '#fff'; ctx.fillText(t, X+6, Math.max(15,Y-6));
+    }
+  });
+}
+
+function found(k){
+  paused = true;
+  if(navigator.vibrate) navigator.vibrate([80,60,160]);
+  $('fFrom').textContent = `${k.stage ? k.stage + ' · ' : ''}'${k.name}'에 숨겨진 열쇠`;
+  if(k.quiz){
+    $('quizBox').style.display = 'block'; $('revealBox').style.display = 'none';
+    $('qQ').textContent = 'Q. ' + k.quiz.q;
+    $('qMsg').className = 'qmsg'; $('qMsg').textContent = '퀴즈를 맞히면 글자가 열립니다';
+    $('qOpts').innerHTML = '';
+    k.quiz.options.forEach((o,i) => {
+      const b = document.createElement('button'); b.className = 'qopt'; b.textContent = (i+1) + '. ' + o;
+      b.onclick = () => {
+        if(i === k.quiz.correct) reveal(k);
+        else { b.classList.remove('wrong'); void b.offsetWidth; b.classList.add('wrong');
+               $('qMsg').className = 'qmsg bad'; $('qMsg').textContent = '앗, 다시 생각해 보세요!'; }
+      };
+      $('qOpts').appendChild(b);
+    });
+  } else reveal(k);
+  $('foundModal').classList.add('show');
+}
+function reveal(k){
+  if(!state.found.includes(k.label)){ state.found.push(k.label); save(); }
+  if(navigator.vibrate) navigator.vibrate(120);
+  $('quizBox').style.display = 'none'; $('revealBox').style.display = 'block';
+  $('fChar').textContent = `'${k.answer}'`;
+  renderMain();
+  const all = state.found.length >= CONFIG.keys.length;
+  $('fContinue').textContent = all ? '🔐 암호 입력하러 가기' : '계속 찾기';
+}
+$('fContinue').onclick = () => {
+  $('foundModal').classList.remove('show');
+  Object.keys(hold).forEach(k => hold[k]=0);
+  if(state.found.length >= CONFIG.keys.length){ renderAnswer(); show('answer'); }
+  else paused = false;
+};
+$('fHome').onclick = () => { $('foundModal').classList.remove('show'); renderMain(); show('main'); };
+
+/* ---------- 4. 정답 ---------- */
+const norm = s => s.replace(/\s+/g,'').normalize('NFC');
+function renderAnswer(){
+  const got = CONFIG.keys.filter(k => state.found.includes(k.label)).map(k => k.answer);
+  $('letters').innerHTML = got.length ? got.map(c => `<span>${c}</span>`).join('') : '<p class="hint">아직 찾은 글자가 없어요</p>';
+  $('ansInput').value = ''; checkAnswer();
+}
+function checkAnswer(){
+  const ok = norm($('ansInput').value) === norm(CONFIG.finalAnswer);
+  $('doneBtn').classList.toggle('show', ok);
+  $('ansMsg').className = 'answer-msg' + (ok ? ' ok' : '');
+  $('ansMsg').textContent = ok ? '🎉 정답! 미션 완료 버튼을 누르세요' : '글자를 올바른 순서로 조합해 보세요';
+  if(ok) $('ansInput').blur();
+}
+$('ansInput').addEventListener('input', checkAnswer);
+$('ansBack').onclick = () => { renderMain(); show('main'); };
+$('doneBtn').onclick = () => {
+  if(!state.finishedAt){ state.finishedAt = Date.now(); save(); }
+  renderDone(); show('done'); confetti();
+};
+
+/* ---------- 5. 완료 ---------- */
+function renderDone(){
+  const u = state.user;
+  $('dName').textContent = u.name; $('dSchool').textContent = u.school; $('dNick').textContent = u.nick;
+  $('dKeys').textContent = `${state.found.length} / ${CONFIG.keys.length}`;
+  const sec = Math.round((state.finishedAt - state.startedAt)/1000);
+  $('dTime').textContent = `${Math.floor(sec/60)}분 ${sec%60}초`;
+  $('doneMsg').textContent = `${u.nick}님, 암호 '${CONFIG.finalAnswer}'을(를) 풀고 탈출했어요!`;
+}
+function confetti(){
+  const colors = ['#f2b84b','#5fd08a','#ff6b6b','#6bb7ff','#ffd98a'];
+  for(let i=0;i<70;i++){
+    const d = document.createElement('div'); d.className = 'confetti';
+    d.style.left = Math.random()*100 + 'vw';
+    d.style.background = colors[i%colors.length];
+    d.style.animationDuration = (2 + Math.random()*2) + 's';
+    d.style.animationDelay = Math.random()*0.8 + 's';
+    document.body.appendChild(d); setTimeout(() => d.remove(), 5000);
+  }
+}
+
+/* ---------- 시작 ---------- */
+load();
+if(state.user){
+  renderMain();
+  if(state.finishedAt){ renderDone(); show('done'); } else show('main');
+  preloadModel();
+} else show('reg');
+</script>
+</body>
+</html>
